@@ -6,5 +6,5 @@ __pycache__/
 env/
 
 # frontend
-*/node_modules/
-*/dist/
+node_modules/
+dist/
