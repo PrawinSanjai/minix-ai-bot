@@ -1,0 +1,18 @@
+.emotional-feedback {
+  padding: 8px 20px;
+  border-top: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.feedback-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.feedback-content i {
+  font-size: 1rem;
+  color: var(--accent-teal);
+}

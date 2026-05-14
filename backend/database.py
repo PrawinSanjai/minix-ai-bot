@@ -17,7 +17,7 @@ NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s",
 }
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
-base = declarative_base(metadata=metadata)
+Base = declarative_base(metadata=metadata)
 engine = create_engine(url=config.DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=0)
 db_session = sessionmaker(autocommit=False, expire_on_commit=False, autoflush=True, bind=engine)
 
