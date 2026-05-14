@@ -7,3 +7,4 @@ class Configuration:
     RATE_LIMIT_WINDOW_SECONDS = get_env("RATE_LIMIT_WINDOW_SECONDS", default=60)
     RATE_LIMIT_MAX_REQUESTS = get_env("RATE_LIMIT_MAX_REQUESTS", default=120)
     MAX_REQUEST_BODY_BYTES = get_env("MAX_REQUEST_BODY_BYTES", default=25000)
+    GEMINI_API_KEY = get_env("GEMINI_API_KEY", default=None)
