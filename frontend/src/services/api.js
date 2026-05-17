@@ -37,17 +37,24 @@ async function request(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
 
   if (!res.ok) {
-    let detail = 'Request failed'
-    try {
-      const body = await res.json()
-      detail = body.detail || detail
-    } catch { /* ignore */ }
-    if (res.status === 401) {
+    let message = 'Something went wrong. Please try again.'
+    const statusMessages = {
+      400: 'Please check your input and try again.',
+      401: 'Incorrect email or password.',
+      403: 'You don\'t have permission to do that.',
+      404: 'The requested resource was not found.',
+      413: 'Message is too long. Please shorten it.',
+      429: 'You\'re moving too fast! Please wait a moment.',
+      500: 'Server error. Please try again later.',
+    }
+    message = statusMessages[res.status] || message
+
+    if (res.status === 401 && !path.includes('/auth/')) {
       setToken(null)
       setUser(null)
       window.location.reload()
     }
-    throw new Error(detail)
+    throw new Error(message)
   }
 
   return res.json()
@@ -64,7 +71,7 @@ const api = {
   // ─── Auth ───
 
   async login(email, password) {
-    const data = await request('/api/auth/login', {
+    const data = await request('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
@@ -74,7 +81,7 @@ const api = {
   },
 
   async register(name, email, password) {
-    const data = await request('/api/auth/register', {
+    const data = await request('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ name, email, password }),
     })
@@ -94,11 +101,11 @@ const api = {
   // ─── User Profile ───
 
   async getProfile() {
-    return request('/api/users/me')
+    return request('/users/me')
   },
 
   async updateProfile(data) {
-    const result = await request('/api/users/me', {
+    const result = await request('/users/me', {
       method: 'PUT',
       body: JSON.stringify(data),
     })
@@ -107,7 +114,7 @@ const api = {
   },
 
   async updateTone(tone) {
-    const result = await request('/api/users/me/tone', {
+    const result = await request('/users/me/tone', {
       method: 'PUT',
       body: JSON.stringify({ tone }),
     })
@@ -116,7 +123,7 @@ const api = {
   },
 
   async changePassword(data) {
-    return request('/api/users/change-password', {
+    return request('/users/change-password', {
       method: 'POST',
       body: JSON.stringify(data),
     })
@@ -125,7 +132,7 @@ const api = {
   // ─── Chat ───
 
   async sendMessage(message, conversationId, topic) {
-    const data = await request('/api/chat/message', {
+    const data = await request('/chat/message', {
       method: 'POST',
       body: JSON.stringify({ message, conversation_id: conversationId, topic }),
     })
@@ -137,7 +144,7 @@ const api = {
   },
 
   async getHistory() {
-    const list = await request('/api/chat/history')
+    const list = await request('/chat/history')
     return list.map(c => ({
       id: String(c.id),
       title: c.title,
@@ -148,7 +155,7 @@ const api = {
   },
 
   async getConversation(id) {
-    const data = await request(`/api/chat/history/${id}`)
+    const data = await request(`/chat/history/${id}`)
     return {
       id: String(data.id),
       title: data.title,
@@ -162,11 +169,11 @@ const api = {
   },
 
   async deleteConversation(id) {
-    return request(`/api/chat/history/${id}`, { method: 'DELETE' })
+    return request(`/chat/history/${id}`, { method: 'DELETE' })
   },
 
   async clearHistory() {
-    return request('/api/chat/history', { method: 'DELETE' })
+    return request('/chat/history', { method: 'DELETE' })
   },
 }
 

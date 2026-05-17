@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useScrollToBottom } from '../../hooks/useScrollToBottom'
-import { getWelcomeMessage, generateResponse } from '../../utils/responses'
-import { detectEmotion } from '../../utils/emotions'
+import { getWelcomeMessage } from '../../utils/responses'
 import { api } from '../../services/api'
 import Message from './Message'
 import ChatSidebar from './ChatSidebar'
@@ -72,7 +71,8 @@ export default function Chat() {
     setBotTyping(true)
 
     try {
-      const result = await api.sendMessage(text, state.currentChatId, state.topic)
+      const cid = state.currentChatId && !String(state.currentChatId).startsWith('local_') ? state.currentChatId : null
+      const result = await api.sendMessage(text, cid, state.topic)
 
       // Update to real server ID if we had a local ID
       if (!state.currentChatId || String(state.currentChatId).startsWith('local_')) {
@@ -84,10 +84,7 @@ export default function Chat() {
         payload: { role: 'bot', text: result.reply },
       })
     } catch (err) {
-      const emotion = detectEmotion(text)
-      const reply = generateResponse(state.tone, emotion)
-      dispatch({ type: 'ADD_MESSAGE', payload: { role: 'bot', text: reply } })
-      setError('Using offline responses — backend unavailable')
+      setError(err.message || 'Could not connect to server.')
     } finally {
       setBotTyping(false)
       setTimeout(() => updateChatHistory(), 100)

@@ -25,31 +25,31 @@ class GLLM:
             raise ValueError("Empty response from Gemini")
         return response.text.strip()
 
-    def generate_chat(self, model: str, system_instruction: str, messages: list[dict], temperature: float = 0.7):
-        chat = self.client.models.start_chat(
-            model=model,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=temperature,
-            ),
-        )
-        for msg in messages:
-            if msg["role"] == "user":
-                chat.send_message(msg["content"])
-        last = messages[-1]["content"] if messages else ""
-        response = chat.send_message(last)
-        if not response or not getattr(response, 'text', None) or not response.text.strip():
-            raise ValueError("Empty response from Gemini chat")
-        return response.text.strip()
+    # def generate_chat(self, model: str, system_instruction: str, messages: list[dict], temperature: float = 0.7):
+    #     chat = self.client.models.start_chat(
+    #         model=model,
+    #         config=types.GenerateContentConfig(
+    #             system_instruction=system_instruction,
+    #             temperature=temperature,
+    #         ),
+    #     )
+    #     for msg in messages:
+    #         if msg["role"] == "user":
+    #             chat.send_message(msg["content"])
+    #     last = messages[-1]["content"] if messages else ""
+    #     response = chat.send_message(last)
+    #     if not response or not getattr(response, 'text', None) or not response.text.strip():
+    #         raise ValueError("Empty response from Gemini chat")
+    #     return response.text.strip()
 
-    def embed(self, text: str, model: str = "text-embedding-004") -> list[float]:
-        result = self.client.models.embed_content(model=model, contents=text)
-        if not result or not result.embeddings:
-            raise ValueError("Empty embedding response from Gemini")
-        return result.embeddings[0].values
+    # def embed(self, text: str, model: str = "text-embedding-004") -> list[float]:
+    #     result = self.client.models.embed_content(model=model, contents=text)
+    #     if not result or not result.embeddings:
+    #         raise ValueError("Empty embedding response from Gemini")
+    #     return result.embeddings[0].values
 
 
-def get_response_from_llm(llm_config: dict, contents: str, message: str) -> str:
+def generate_response_from_llm(llm_config: dict, contents: str) -> str:
     """Send a prompt to Gemini and return the response text."""
     model_cfg = _build_model_config(llm_config)
     model = model_cfg.pop("model")

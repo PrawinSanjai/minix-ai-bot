@@ -9,6 +9,7 @@ from middleware.security import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
+from sqlalchemy import text
 from database import engine, Base
 from apis.auth import router as auth_router
 from apis.user import router as user_router
@@ -21,8 +22,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
-
-# ── Middleware ──
 
 api.add_middleware(
     CORSMiddleware,
@@ -42,19 +41,18 @@ api.add_middleware(
     window_seconds=config.RATE_LIMIT_WINDOW_SECONDS,
 )
 
-# ── Create tables on startup ──
-
 @api.on_event("startup")
 def on_startup():
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
     Base.metadata.create_all(bind=engine)
 
-# ── Routers ──
 
 api.include_router(auth_router)
 api.include_router(user_router)
 api.include_router(chat_router)
 
-# ── Root routes ──
 
 @api.get("/")
 def home():

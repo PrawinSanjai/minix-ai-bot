@@ -168,10 +168,36 @@ ul {
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 100vw !important;
+    min-width: 100vw !important;
+  }
+}
+
 @media (max-width: 768px) {
   html { font-size: 15px; }
+  .auth-card { padding: 28px 20px !important; }
+  .onboarding-card { padding: 28px 20px !important; }
+  .settings-container { padding: 12px !important; }
+  .settings-section { padding: 16px !important; }
+  .messages { padding: 16px 12px !important; }
+  .input-bar { padding: 10px 12px !important; }
+  .chat-header { padding: 10px 12px !important; }
+  .welcome-icon { width: 48px; height: 48px; font-size: 1.2rem; }
+  .welcome-message { padding: 20px 12px; }
+  .welcome-message h3 { font-size: 1rem; }
 }
 
 @media (max-width: 400px) {
   html { font-size: 14px; }
+  .auth-card { padding: 20px 14px !important; }
+  .onboarding-card { padding: 20px 14px !important; }
+  .sidebar { padding: 0; }
+  .sidebar-header { padding: 14px; }
+  .sidebar-search { padding: 10px 14px; }
+  .chat-history { padding: 10px 8px; }
+  .history-item { padding: 8px 10px; }
+  .tone-content { padding: 10px 12px; }
+  .chip { padding: 8px 14px; font-size: 0.85rem; }
 }

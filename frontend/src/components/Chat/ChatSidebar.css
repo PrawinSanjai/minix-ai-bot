@@ -203,6 +203,8 @@
     position: fixed;
     left: 0;
     top: 0;
+    width: 320px;
+    min-width: 320px;
     transform: translateX(-100%);
     box-shadow: 4px 0 30px rgba(0, 0, 0, 0.3);
   }

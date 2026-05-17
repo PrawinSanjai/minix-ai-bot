@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+# from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -21,7 +21,7 @@ Base = declarative_base(metadata=metadata)
 engine = create_engine(url=config.DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=0)
 db_session = sessionmaker(autocommit=False, expire_on_commit=False, autoflush=True, bind=engine)
 
-@contextmanager
+# @contextmanager
 def get_db():
     """
     Create database session for database operations.
