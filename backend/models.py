@@ -42,3 +42,15 @@ class Message(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     conversation = relationship("Conversation", back_populates="messages")
+    embedding = relationship("MessageEmbedding", back_populates="message", uselist=False, cascade="all, delete-orphan")
+
+
+class MessageEmbedding(Base):
+    __tablename__ = "message_embeddings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    embedding = Column(Text, nullable=False)
+
+    message = relationship("Message", back_populates="embedding")
