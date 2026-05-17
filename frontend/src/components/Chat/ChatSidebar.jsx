@@ -2,11 +2,24 @@ import { useApp } from '../../context/AppContext'
 import './ChatSidebar.css'
 
 export default function ChatSidebar() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, loadConversation } = useApp()
 
-  function loadChat(id) {
-    dispatch({ type: 'LOAD_CHAT', payload: id })
+  function handleLoadChat(chatId) {
+    dispatch({ type: 'SET_CURRENT_CHAT', payload: chatId })
     dispatch({ type: 'CLOSE_SIDEBAR' })
+
+    // Fetch full conversation if it's a server-side chat (numeric ID)
+    if (!String(chatId).startsWith('local_')) {
+      loadConversation(chatId)
+    } else {
+      // Load from local state
+      const chat = state.chatHistory.find(c => c.id === chatId)
+      if (chat && chat.messages) {
+        dispatch({ type: 'SET_CHAT_MESSAGES', payload: chat.messages })
+      } else {
+        dispatch({ type: 'CLEAR_MESSAGES' })
+      }
+    }
   }
 
   function newChat() {
@@ -51,7 +64,7 @@ export default function ChatSidebar() {
               <li
                 key={chat.id}
                 className={`history-item${chat.id === state.currentChatId ? ' active' : ''}`}
-                onClick={() => loadChat(chat.id)}
+                onClick={() => handleLoadChat(chat.id)}
               >
                 <div className="history-item-icon">
                   <i className="fa-regular fa-comment-dots" />

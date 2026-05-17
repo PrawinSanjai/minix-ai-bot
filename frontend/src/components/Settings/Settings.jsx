@@ -10,30 +10,38 @@ const TONES = [
 ]
 
 export default function Settings() {
-  const { state, dispatch } = useApp()
+  const { state, dispatch, handleUpdateProfile, handleUpdateTone, handleLogout, handleClearHistory } = useApp()
   const [name, setName] = useState(state.user.name)
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
+  const [saving, setSaving] = useState(false)
 
-  function handleSave() {
-    if (name.trim()) {
-      dispatch({ type: 'SET_USER', payload: { ...state.user, name: name.trim() } })
+  async function handleSave() {
+    setSaving(true)
+    try {
+      if (name.trim() && name.trim() !== state.user.name) {
+        await handleUpdateProfile(name.trim())
+      }
+      const selectedTone = document.querySelector('input[name="tone"]:checked')?.value
+      if (selectedTone && selectedTone !== state.tone) {
+        await handleUpdateTone(selectedTone)
+      }
+      alert('Settings saved!')
+    } catch (err) {
+      alert('Error saving settings: ' + err.message)
+    } finally {
+      setSaving(false)
     }
-    dispatch({ type: 'SET_TONE', payload: document.querySelector('input[name="tone"]:checked')?.value || state.tone })
-    alert('Settings saved!')
   }
 
-  function handleClearHistory() {
+  function handleClear() {
     if (state.chatHistory.length === 0) return
-    dispatch({ type: 'CLEAR_HISTORY' })
+    handleClearHistory()
   }
 
-  function handleLogout() {
-    dispatch({ type: 'CLEAR_HISTORY' })
-    dispatch({ type: 'SET_USER', payload: { name: '', email: '' } })
-    dispatch({ type: 'CLEAR_MESSAGES' })
-    dispatch({ type: 'SET_SCREEN', payload: 'login' })
+  function handleLogoutClick() {
+    handleLogout()
   }
 
   return (
@@ -91,18 +99,18 @@ export default function Settings() {
           <GlassCard className="settings-section danger">
             <h3><i className="fa-regular fa-triangle-exclamation" /> Data</h3>
             <p className="settings-desc">Manage your conversation data</p>
-            <button className="btn-secondary danger-btn" onClick={handleClearHistory}>
+            <button className="btn-secondary danger-btn" onClick={handleClear}>
               <i className="fa-regular fa-trash-can" />
               Clear Chat History
             </button>
           </GlassCard>
 
-          <button className="btn-primary gradient" onClick={handleSave}>
+          <button className="btn-primary gradient" onClick={handleSave} disabled={saving}>
             <i className="fa-regular fa-floppy-disk" />
-            <span>Save Changes</span>
+            <span>{saving ? 'Saving...' : 'Save Changes'}</span>
           </button>
 
-          <button className="btn-secondary logout-btn" onClick={handleLogout}>
+          <button className="btn-secondary logout-btn" onClick={handleLogoutClick}>
             <i className="fa-solid fa-right-from-bracket" />
             Logout
           </button>

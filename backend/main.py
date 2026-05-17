@@ -9,6 +9,10 @@ from middleware.security import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
+from database import engine, Base
+from apis.auth import router as auth_router
+from apis.user import router as user_router
+from apis.chat import router as chat_router
 
 api = FastAPI(title="minix-backend", docs_url="/docs")
 config = Configuration()
@@ -18,12 +22,14 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+# ── Middleware ──
+
 api.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ALLOW_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["*"],
 )
 api.add_middleware(SecurityHeadersMiddleware)
 api.add_middleware(
@@ -36,16 +42,24 @@ api.add_middleware(
     window_seconds=config.RATE_LIMIT_WINDOW_SECONDS,
 )
 
+# ── Create tables on startup ──
+
+@api.on_event("startup")
+def on_startup():
+    Base.metadata.create_all(bind=engine)
+
+# ── Routers ──
+
+api.include_router(auth_router)
+api.include_router(user_router)
+api.include_router(chat_router)
+
+# ── Root routes ──
+
 @api.get("/")
 def home():
-    return {
-        "result": "success",
-        "message": "Please Go To /Docs"
-    }
+    return {"result": "success", "message": "Please Go To /Docs"}
 
 @api.get("/health-check")
 def healthcheck():
-    return {
-        "result": "success",
-        "time": datetime.now()
-    }
+    return {"result": "success", "time": datetime.now()}

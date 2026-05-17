@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useScrollToBottom } from '../../hooks/useScrollToBottom'
 import { getWelcomeMessage, generateResponse } from '../../utils/responses'
 import { detectEmotion } from '../../utils/emotions'
+import { api } from '../../services/api'
 import Message from './Message'
 import ChatSidebar from './ChatSidebar'
 import InputBar from './InputBar'
@@ -11,22 +12,34 @@ import TypingIndicator from './TypingIndicator'
 import './Chat.css'
 
 export default function Chat() {
-  const { state, dispatch, updateChatHistory } = useApp()
+  const { state, dispatch, updateChatHistory, fetchHistory, loadConversation } = useApp()
   const [botTyping, setBotTyping] = useState(false)
+  const [error, setError] = useState('')
   const messagesRef = useScrollToBottom([state.messages, botTyping])
+  const historyFetched = useRef(false)
 
   const hasMessages = state.messages.length > 0
 
+  // Fetch history on first mount
   useEffect(() => {
-    if (!hasMessages && state.topic) {
+    if (!historyFetched.current) {
+      historyFetched.current = true
+      fetchHistory()
+    }
+  }, [fetchHistory])
+
+  // Show welcome message for new chats
+  useEffect(() => {
+    if (!hasMessages && state.topic && !state.currentChatId) {
       const welcome = getWelcomeMessage(state.topic)
       dispatch({ type: 'ADD_MESSAGE', payload: { role: 'bot', text: welcome } })
     }
   }, [])
 
+  // Auto-create a new chat entry in sidebar when first message arrives
   useEffect(() => {
     if (state.messages.length === 1 && state.messages[0].role === 'bot' && !state.currentChatId) {
-      const id = 'chat_' + Date.now()
+      const id = 'local_' + Date.now()
       dispatch({
         type: 'ADD_CHAT',
         payload: {
@@ -34,17 +47,17 @@ export default function Chat() {
           title: state.topic || 'New conversation',
           preview: '',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          messages: [...state.messages],
         },
       })
     }
   }, [state.messages, state.currentChatId, dispatch, state.topic])
 
-  const handleSend = useCallback((text) => {
+  const handleSend = useCallback(async (text) => {
+    setError('')
     dispatch({ type: 'ADD_MESSAGE', payload: { role: 'user', text } })
 
     if (!state.currentChatId) {
-      const id = 'chat_' + Date.now()
+      const id = 'local_' + Date.now()
       dispatch({
         type: 'ADD_CHAT',
         payload: {
@@ -52,21 +65,41 @@ export default function Chat() {
           title: text.slice(0, 30),
           preview: text.slice(0, 50),
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          messages: [],
         },
       })
     }
 
     setBotTyping(true)
 
-    setTimeout(() => {
+    try {
+      const result = await api.sendMessage(text, state.currentChatId, state.topic)
+
+      // Update to real server ID if we had a local ID
+      if (!state.currentChatId || String(state.currentChatId).startsWith('local_')) {
+        dispatch({ type: 'SET_CURRENT_CHAT', payload: result.conversationId })
+      }
+
+      dispatch({
+        type: 'ADD_MESSAGE',
+        payload: { role: 'bot', text: result.reply },
+      })
+    } catch (err) {
       const emotion = detectEmotion(text)
-      const response = generateResponse(state.tone, emotion)
-      dispatch({ type: 'ADD_MESSAGE', payload: { role: 'bot', text: response } })
+      const reply = generateResponse(state.tone, emotion)
+      dispatch({ type: 'ADD_MESSAGE', payload: { role: 'bot', text: reply } })
+      setError('Using offline responses — backend unavailable')
+    } finally {
       setBotTyping(false)
-      setTimeout(() => updateChatHistory(), 50)
-    }, 1000 + Math.random() * 800)
-  }, [state.currentChatId, state.tone, dispatch, updateChatHistory])
+      setTimeout(() => updateChatHistory(), 100)
+      setTimeout(() => fetchHistory(), 200)
+    }
+  }, [state.currentChatId, state.topic, state.tone, dispatch, updateChatHistory, fetchHistory])
+
+  function handleClearChat() {
+    if (state.messages.length === 0) return
+    dispatch({ type: 'CLEAR_MESSAGES' })
+    setTimeout(() => updateChatHistory(), 50)
+  }
 
   return (
     <div className="chat-layout">
@@ -84,16 +117,7 @@ export default function Chat() {
             <span className="chat-status">{botTyping ? 'Typing...' : 'Online'}</span>
           </div>
           <div className="chat-header-actions">
-            <button
-              className="icon-btn"
-              onClick={() => {
-                if (state.messages.length === 0) return
-                dispatch({ type: 'CLEAR_MESSAGES' })
-                setTimeout(() => updateChatHistory(), 50)
-              }}
-              aria-label="Clear chat"
-              title="Clear chat"
-            >
+            <button className="icon-btn" onClick={handleClearChat} aria-label="Clear chat" title="Clear chat">
               <i className="fa-regular fa-trash-can" />
             </button>
           </div>
@@ -114,6 +138,8 @@ export default function Chat() {
             ))
           )}
         </div>
+
+        {error && <div className="chat-error">{error}</div>}
 
         <EmotionalFeedback messages={state.messages} />
         <TypingIndicator active={botTyping} />

@@ -58,6 +58,15 @@
   margin-bottom: 28px;
 }
 
+.auth-error {
+  font-size: 0.85rem;
+  color: var(--danger);
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(231, 76, 111, 0.1);
+  border-radius: var(--radius-sm);
+}
+
 .auth-switch {
   margin-top: 22px;
   font-size: 0.9rem;

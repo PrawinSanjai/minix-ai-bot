@@ -4,16 +4,24 @@ import GlassCard from '../UI/GlassCard'
 import './Auth.css'
 
 export default function Login() {
-  const { dispatch } = useApp()
+  const { state, dispatch, handleLogin } = useApp()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!email || !password) return
-    const name = email.split('@')[0]
-    dispatch({ type: 'SET_USER', payload: { name, email } })
-    dispatch({ type: 'SET_SCREEN', payload: 'onboarding' })
+    setError('')
+    setLoading(true)
+    try {
+      await handleLogin(email, password)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -38,8 +46,9 @@ export default function Login() {
             <label htmlFor="login-password"><i className="fa-regular fa-lock" /> Password</label>
             <input id="login-password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
-          <button type="submit" className="btn-primary gradient">
-            <span>Login</span>
+          {error && <p className="auth-error">{error}</p>}
+          <button type="submit" className="btn-primary gradient" disabled={loading}>
+            <span>{loading ? 'Logging in...' : 'Login'}</span>
             <i className="fa-solid fa-arrow-right" />
           </button>
         </form>

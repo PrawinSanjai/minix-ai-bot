@@ -1,51 +1,53 @@
 from fastapi import APIRouter, Depends
-from datetime import datetime
+from sqlalchemy.orm import Session
 
-import models
+from database import get_db
 import schemas
-from database import db_session
-from services import auth
+from services.auth import AuthService, get_current_user
+from models import User
 
-router = APIRouter()
-auth_service = auth.AuthService()
+router = APIRouter(prefix="/api/users", tags=["users"])
+auth_service = AuthService()
 
-@router.get("/health")
-def health_check():
-    return {
-        "time": datetime.now(),
-        "result": "success"
-    }
 
 @router.get("/me", response_model=schemas.UserOut)
-def get_user_profile(user = Depends(auth.get_current_user)):
-    profile_id = None
-    with db_session() as db:
-        role = user.role.lower()
-        if role == "patient":
-            profile = db.query(models.Patient).filter(models.Patient.user_id == user.id).first()
-            profile_id = profile.id if profile else None
-        elif role == "doctor":
-            profile = db.query(models.Doctor).filter(models.Doctor.user_id == user.id).first()
-            profile_id = profile.id if profile else None
+def get_profile(user: User = Depends(get_current_user)):
+    return user
 
-    return schemas.UserOut(
-        id=user.id,
-        name=user.name,
-        email=user.email,
-        role=user.role,
-        is_active=user.is_active,
-        profile_id=profile_id,
-    )
+
+@router.put("/me", response_model=schemas.UserOut)
+def update_profile(
+    payload: schemas.UserUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.name is not None:
+        user.name = payload.name
+        db.commit()
+        db.refresh(user)
+    return user
+
+
+@router.put("/me/tone", response_model=schemas.UserOut)
+def update_tone(
+    payload: schemas.ToneUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.tone = payload.tone
+    db.commit()
+    db.refresh(user)
+    return user
+
 
 @router.post("/change-password")
-def change_password(payload: schemas.ChangePasswordRequest, user = Depends(auth.get_current_user)):
+def change_password(
+    payload: schemas.ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+):
     return auth_service.change_password(
         user=user,
         current_password=payload.current_password,
         new_password=payload.new_password,
         confirm_password=payload.confirm_password,
     )
-
-@router.post("/logout")
-def logout(user = Depends(auth.get_current_user)):
-    return auth_service.logout()

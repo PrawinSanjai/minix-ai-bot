@@ -4,16 +4,25 @@ import GlassCard from '../UI/GlassCard'
 import './Auth.css'
 
 export default function Signup() {
-  const { dispatch } = useApp()
+  const { dispatch, handleRegister } = useApp()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!name || !email || !password) return
-    dispatch({ type: 'SET_USER', payload: { name, email } })
-    dispatch({ type: 'SET_SCREEN', payload: 'onboarding' })
+    setError('')
+    setLoading(true)
+    try {
+      await handleRegister(name, email, password)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -42,8 +51,9 @@ export default function Signup() {
             <label htmlFor="signup-password"><i className="fa-regular fa-lock" /> Password</label>
             <input id="signup-password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
-          <button type="submit" className="btn-primary gradient">
-            <span>Create Account</span>
+          {error && <p className="auth-error">{error}</p>}
+          <button type="submit" className="btn-primary gradient" disabled={loading}>
+            <span>{loading ? 'Creating...' : 'Create Account'}</span>
             <i className="fa-solid fa-heart" />
           </button>
         </form>
