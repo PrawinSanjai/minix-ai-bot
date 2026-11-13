@@ -1,8 +1,13 @@
+import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import './ChatSidebar.css'
 
 export default function ChatSidebar() {
-  const { state, dispatch, loadConversation } = useApp()
+  const { state, dispatch, loadConversation, handleDeleteChat } = useApp()
+  const [search, setSearch] = useState('')
+  const visibleChats = state.chatHistory.filter(chat =>
+    `${chat.title} ${chat.preview}`.toLowerCase().includes(search.toLowerCase()),
+  )
 
   function handleLoadChat(chatId) {
     dispatch({ type: 'SET_CURRENT_CHAT', payload: chatId })
@@ -48,19 +53,19 @@ export default function ChatSidebar() {
 
       <div className="sidebar-search">
         <i className="fa-solid fa-search" />
-        <input type="text" placeholder="Search conversations..." />
+        <input type="search" placeholder="Search conversations..." value={search} onChange={e => setSearch(e.target.value)} aria-label="Search conversations" />
       </div>
 
       <div className="chat-history">
         <h3 className="section-title">Chat History</h3>
-        {state.chatHistory.length === 0 ? (
+        {visibleChats.length === 0 ? (
           <div className="history-empty">
             <i className="fa-regular fa-message" />
-            <span>No conversations yet</span>
+            <span>{state.chatHistory.length ? 'No matching conversations' : 'No conversations yet'}</span>
           </div>
         ) : (
           <ul>
-            {state.chatHistory.map(chat => (
+            {visibleChats.map(chat => (
               <li
                 key={chat.id}
                 className={`history-item${chat.id === state.currentChatId ? ' active' : ''}`}
@@ -74,6 +79,17 @@ export default function ChatSidebar() {
                   <div className="history-item-preview">{chat.preview || 'No messages'}</div>
                 </div>
                 <span className="history-item-time">{chat.time || ''}</span>
+                <button
+                  className="history-delete"
+                  aria-label={`Delete ${chat.title}`}
+                  title="Delete conversation"
+                  onClick={e => {
+                    e.stopPropagation()
+                    handleDeleteChat(chat.id).catch(err => window.alert(err.message || 'Could not delete this conversation.'))
+                  }}
+                >
+                  <i className="fa-regular fa-trash-can" />
+                </button>
               </li>
             ))}
           </ul>

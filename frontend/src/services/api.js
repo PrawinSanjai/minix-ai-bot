@@ -48,6 +48,10 @@ async function request(path, options = {}) {
       500: 'Server error. Please try again later.',
     }
     message = statusMessages[res.status] || message
+    try {
+      const body = await res.json()
+      if (typeof body.detail === 'string') message = body.detail
+    } catch { /* response did not contain JSON */ }
 
     if (res.status === 401 && !path.includes('/auth/')) {
       setToken(null)
@@ -140,6 +144,60 @@ const api = {
       reply: data.reply,
       conversationId: data.conversation_id,
       emotion: data.emotion,
+    }
+  },
+
+  async enqueueMessage(message, conversationId, topic, idempotencyKey) {
+    return request('/chat/message', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ message, conversation_id: conversationId, topic }),
+    })
+  },
+
+  async getChatJob(jobId) {
+    return request(`/chat/jobs/${jobId}`)
+  },
+
+  async streamChatJob(jobId, onEvent, signal) {
+    const headers = { Authorization: `Bearer ${getToken()}` }
+    const response = await fetch(`${API_BASE}/chat/jobs/${jobId}/events`, { headers, signal })
+    if (!response.ok) {
+      let detail = 'Live reply stream is unavailable.'
+      try {
+        const body = await response.json()
+        if (body.detail) detail = body.detail
+      } catch { /* use generic message */ }
+      throw new Error(detail)
+    }
+    if (!response.body) throw new Error('This browser cannot stream chat replies.')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let done = false
+
+    while (!done) {
+      const { value, done: streamDone } = await reader.read()
+      done = streamDone
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+      let boundary
+      while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        let event = 'message'
+        const data = []
+        for (const line of block.split(/\r?\n/)) {
+          if (line.startsWith('event:')) event = line.slice(6).trim()
+          if (line.startsWith('data:')) data.push(line.slice(5).trim())
+        }
+        if (!data.length) continue
+        onEvent(event, JSON.parse(data.join('\n')))
+        if (event === 'completed' || event === 'failed') {
+          await reader.cancel()
+          return
+        }
+      }
     }
   },
 

@@ -98,3 +98,17 @@ class ChatResponse(BaseModel):
     reply: str
     conversation_id: int
     emotion: str
+
+
+class ChatJobAccepted(BaseModel):
+    job_id: int
+    conversation_id: int
+    status: str
+
+
+class ChatJobStatus(BaseModel):
+    job_id: int
+    conversation_id: int
+    status: str
+    reply: Optional[str] = None
+    error: Optional[str] = None

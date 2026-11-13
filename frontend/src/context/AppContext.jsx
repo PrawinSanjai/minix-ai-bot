@@ -42,6 +42,16 @@ function reducer(state, action) {
       return { ...state, messages: [...state.messages, msg] }
     }
 
+    case 'ADD_MESSAGE_TO_CHAT': {
+      if (String(state.currentChatId) !== String(action.payload.conversationId)) return state
+      const msg = {
+        role: action.payload.message.role,
+        text: action.payload.message.text,
+        time: action.payload.message.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }
+      return { ...state, messages: [...state.messages, msg] }
+    }
+
     case 'SET_CURRENT_CHAT':
       return { ...state, currentChatId: action.payload }
 
@@ -83,7 +93,7 @@ function reducer(state, action) {
       let msgs = state.messages
       let cid = state.currentChatId
       if (state.currentChatId === action.payload) {
-        cid = filtered.length > 0 ? filtered[0].id : null
+        cid = null
         msgs = []
       }
       return { ...state, chatHistory: filtered, currentChatId: cid, messages: msgs }
@@ -122,7 +132,12 @@ export function AppProvider({ children }) {
 
     if (token && savedUser) {
       dispatch({ type: 'SET_USER', payload: savedUser })
-      dispatch({ type: 'SET_SCREEN', payload: 'onboarding' })
+      api.getProfile().then(user => {
+        dispatch({ type: 'SET_USER', payload: user })
+        dispatch({ type: 'SET_SCREEN', payload: 'chat' })
+      }).catch(() => {
+        if (getToken()) dispatch({ type: 'SET_SCREEN', payload: 'login' })
+      })
     } else {
       const saved = loadState()
       if (saved && saved.user && saved.user.name) {
@@ -151,7 +166,7 @@ export function AppProvider({ children }) {
   const handleLogin = useCallback(async (email, password) => {
     const data = await api.login(email, password)
     dispatch({ type: 'SET_USER', payload: data.user })
-    dispatch({ type: 'SET_SCREEN', payload: 'onboarding' })
+    dispatch({ type: 'SET_SCREEN', payload: 'chat' })
   }, [])
 
   const handleRegister = useCallback(async (name, email, password) => {
@@ -185,34 +200,29 @@ export function AppProvider({ children }) {
   }, [])
 
   const handleDeleteChat = useCallback(async (id) => {
-    try {
-      await api.deleteConversation(id)
-    } catch { /* offline */ }
+    if (!String(id).startsWith('local_')) await api.deleteConversation(id)
     dispatch({ type: 'DELETE_CHAT', payload: id })
   }, [])
 
   const handleClearHistory = useCallback(async () => {
-    try {
-      await api.clearHistory()
-    } catch { /* offline */ }
+    await api.clearHistory()
     dispatch({ type: 'CLEAR_HISTORY' })
   }, [])
 
   // ─── Settings handlers ───
 
   const handleUpdateProfile = useCallback(async (name) => {
-    try {
-      await api.updateProfile({ name })
-    } catch { /* offline */ }
-    dispatch({ type: 'SET_USER', payload: { ...state.user, name } })
-  }, [state.user])
+    const updated = await api.updateProfile({ name })
+    dispatch({ type: 'SET_USER', payload: updated })
+  }, [])
 
   const handleUpdateTone = useCallback(async (tone) => {
-    try {
-      await api.updateTone(tone)
-    } catch { /* offline */ }
+    const updated = await api.updateTone(tone)
     dispatch({ type: 'SET_TONE', payload: tone })
+    dispatch({ type: 'SET_USER', payload: updated })
   }, [])
+
+  const handleChangePassword = useCallback((data) => api.changePassword(data), [])
 
   return (
     <AppContext.Provider value={{
@@ -228,6 +238,7 @@ export function AppProvider({ children }) {
       handleClearHistory,
       handleUpdateProfile,
       handleUpdateTone,
+      handleChangePassword,
     }}>
       {children}
     </AppContext.Provider>

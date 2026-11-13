@@ -40,10 +40,12 @@ def update_tone_route(
 def change_password_route(
     payload: schemas.ChangePasswordRequest,
     user: User = Depends(auth_service.get_current_user),
+    db: Session = Depends(get_db),
 ):
     return auth_service.change_password(
         current_password=payload.current_password,
         new_password=payload.new_password,
         confirm_password=payload.confirm_password,
         user=user,
+        db=db,
     )

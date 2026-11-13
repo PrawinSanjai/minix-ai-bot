@@ -1,18 +1,30 @@
 from google import genai
 from google.genai import types
+import threading
 
 from config import Configuration
 
 config = Configuration()
 GEMINI_API_KEY = config.GEMINI_API_KEY
+_client = None
+_client_lock = threading.Lock()
+
+
+def _get_client(use_vertex: bool = False):
+    global _client
+    if not GEMINI_API_KEY or GEMINI_API_KEY == "None":
+        raise ValueError("GEMINI_API_KEY is not configured")
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = genai.Client(api_key=GEMINI_API_KEY, vertexai=use_vertex)
+    return _client
 
 
 class GLLM:
     """Gemini LLM client. Works with regular Gemini API (not Vertex AI by default)."""
     def __init__(self, use_vertex=False):
-        if not GEMINI_API_KEY or GEMINI_API_KEY == "None":
-            raise ValueError("GEMINI_API_KEY is not configured")
-        self.client = genai.Client(api_key=GEMINI_API_KEY, vertexai=use_vertex)
+        self.client = _get_client(use_vertex)
 
     def generate(self, model: str, contents: str | list[str], temperature: float = 0.7, seed: int | None = None):
         kwargs = {
@@ -24,6 +36,16 @@ class GLLM:
         if not response or not getattr(response, 'text', None) or not response.text.strip():
             raise ValueError("Empty response from Gemini")
         return response.text.strip()
+
+    def generate_stream(self, model: str, contents: str, temperature: float = 0.0):
+        for chunk in self.client.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=types.GenerateContentConfig(temperature=temperature),
+        ):
+            text = getattr(chunk, "text", None)
+            if text:
+                yield text
 
     # def generate_chat(self, model: str, system_instruction: str, messages: list[dict], temperature: float = 0.7):
     #     chat = self.client.models.start_chat(
@@ -78,6 +100,16 @@ def generate_response_from_llm(llm_config: dict, contents: str) -> str:
             except Exception as ee:
                 print(f"[GLLM][RETRY] Failed: {ee}")
         raise ValueError("GLLM failed to generate a response")
+
+
+def stream_response_from_llm(llm_config: dict, contents: str):
+    model_cfg = _build_model_config(llm_config)
+    model = model_cfg.pop("model")
+    yield from GLLM().generate_stream(
+        model=model,
+        contents=contents,
+        temperature=model_cfg.get("temperature", 0.0),
+    )
 
 
 def _build_model_config(llm_config: dict) -> dict:

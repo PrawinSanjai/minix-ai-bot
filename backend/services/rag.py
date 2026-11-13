@@ -1,8 +1,12 @@
 import json, re
+import threading
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from models import Message, MessageEmbedding, Conversation
+
+_model = None
+_model_lock = threading.Lock()
 
 
 class RAG_Service():
@@ -11,7 +15,7 @@ class RAG_Service():
         return re.findall(r'\b[a-z0-9]+\b', text.lower())
     
 
-    def keyword_search(self, db: Session, query: str, user_id: int, limit: int = 5) -> list[dict]:
+    def keyword_search(self, db: Session, query: str, user_id: int, limit: int = 5, exclude_message_id: int | None = None) -> list[dict]:
         tokens = self._tokenize(query)
         if not tokens:
             return []
@@ -22,13 +26,14 @@ class RAG_Service():
             .subquery()
         )
 
-        recent = (
+        message_query = (
             db.query(Message)
             .filter(Message.conversation_id.in_(conv_ids))
             .order_by(Message.created_at.desc())
-            .limit(100)
-            .all()
         )
+        if exclude_message_id is not None:
+            message_query = message_query.filter(Message.id != exclude_message_id)
+        recent = message_query.limit(100).all()
 
         scored = []
         for msg in recent:
@@ -44,21 +49,24 @@ class RAG_Service():
         ]
     
 
-    def embedding_search(self, db: Session, query_embedding: list[float], user_id: int, limit: int = 5) -> list[dict]:
+    def embedding_search(self, db: Session, query_embedding: list[float], user_id: int, limit: int = 5, exclude_message_id: int | None = None) -> list[dict]:
         """Search using pgvector cosine distance (<->)."""
         try:
             vec = json.dumps(query_embedding)
-            rows = db.execute(
-                text("""
-                    SELECT me.message_id, m.content, m.role, me.embedding <=> :query_vec AS distance
+            exclude_clause = "AND m.id <> :exclude_id" if exclude_message_id is not None else ""
+            query = text(f"""
+                    SELECT me.message_id, m.content, m.role, me.embedding <=> CAST(:query_vec AS vector) AS distance
                     FROM message_embeddings me
                     JOIN messages m ON m.id = me.message_id
                     WHERE me.user_id = :uid
+                    {exclude_clause}
                     ORDER BY distance
                     LIMIT :lim
-                """),
-                {"query_vec": vec, "uid": user_id, "lim": limit},
-            ).fetchall()
+                """)
+            params = {"query_vec": vec, "uid": user_id, "lim": limit}
+            if exclude_message_id is not None:
+                params["exclude_id"] = exclude_message_id
+            rows = db.execute(query, params).fetchall()
 
             return [
                 {"message_id": r[0], "content": str(r[1])[:300], "role": str(r[2]), "score": round(float(r[3]), 4)}
@@ -68,13 +76,13 @@ class RAG_Service():
             print(f"[RAG] pgvector search failed: {e}")
             return []
     
-    _model = None
-
     def _get_model(self):
         global _model
         if _model is None:
-            from fastembed import TextEmbedding
-            _model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+            with _model_lock:
+                if _model is None:
+                    from fastembed import TextEmbedding
+                    _model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
         return _model
     
 
@@ -85,6 +93,12 @@ class RAG_Service():
         except Exception as e:
             print(f"[RAG] Local embedding failed: {e}")
             return None
+
+
+    def generate_query_embedding(self, query: str) -> list[float] | None:
+        """Embed a short search query using BGE's retrieval instruction."""
+        instruction = "Represent this sentence for searching relevant passages: "
+        return self.generate_embedding(f"{instruction}{query}")
         
 
     def store_embedding(self, db: Session, message_id: int, user_id: int, embedding: list[float]):
@@ -103,16 +117,25 @@ class RAG_Service():
             )
 
 
-    def search_relevant_context(self, db: Session, query: str, user_id: int, limit: int = 5) -> str:
-        results = []
-
-        embedding = self.generate_embedding(query)
+    def search_relevant_context(self, db: Session, query: str, user_id: int, limit: int = 5, exclude_message_id: int | None = None) -> str:
+        # Fuse vector and lexical rankings so exact names/details and paraphrases
+        # can both surface. Reciprocal Rank Fusion needs no score calibration.
+        candidate_limit = max(limit * 3, limit)
+        embedding = self.generate_query_embedding(query)
+        semantic_results = []
         if embedding:
-            results = self.embedding_search(db, embedding, user_id, limit=limit)
+            semantic_results = self.embedding_search(db, embedding, user_id, limit=candidate_limit, exclude_message_id=exclude_message_id)
 
-        if not results:
-            results = self.keyword_search(db, query, user_id, limit=limit)
+        keyword_results = self.keyword_search(db, query, user_id, limit=candidate_limit, exclude_message_id=exclude_message_id)
+        fused = {}
+        rrf_constant = 60
+        for ranked_results in (semantic_results, keyword_results):
+            for rank, result in enumerate(ranked_results, start=1):
+                message_id = result["message_id"]
+                entry = fused.setdefault(message_id, {"result": result, "score": 0.0})
+                entry["score"] += 1 / (rrf_constant + rank)
 
+        results = [entry["result"] for entry in sorted(fused.values(), key=lambda item: item["score"], reverse=True)[:limit]]
         if not results:
             return ""
 

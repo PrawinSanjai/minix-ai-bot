@@ -1,8 +1,22 @@
+import logging
+import re
 import time
+import asyncio
 from fastapi import Request
-from collections import defaultdict, deque
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+from redis.exceptions import RedisError
+from services import observability
+
+logger = logging.getLogger(__name__)
+
+RATE_LIMIT_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return {count, redis.call('TTL', KEYS[1])}
+"""
 
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
@@ -34,29 +48,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self.requests = defaultdict(deque)
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in {"/", "/health-check", "/docs", "/openapi.json"}:
+        if request.method == "OPTIONS" or request.url.path in {"/", "/health-check", "/docs", "/openapi.json"}:
+            return await call_next(request)
+
+        redis_client = getattr(request.app.state, "redis_limiter", None)
+        if redis_client is None:
             return await call_next(request)
 
         client_host = request.client.host if request.client else "unknown"
-        key = f"{client_host}:{request.url.path}"
-        now = time.monotonic()
-        window_start = now - self.window_seconds
-        timestamps = self.requests[key]
+        key = f"minix:rate:{client_host}:{request.method}:{request.url.path}"
+        try:
+            count, ttl = await redis_client.eval(RATE_LIMIT_SCRIPT, 1, key, self.window_seconds)
+            count = int(count)
+            ttl = int(ttl)
+        except (RedisError, TypeError, ValueError):
+            logger.debug("Redis rate limiter unavailable; allowing request", exc_info=True)
+            return await call_next(request)
 
-        while timestamps and timestamps[0] < window_start:
-            timestamps.popleft()
-
-        if len(timestamps) >= self.max_requests:
+        if count > self.max_requests:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please try again later."},
-                headers={"Retry-After": str(self.window_seconds)},
+                headers={"Retry-After": str(max(ttl, 1))},
             )
-
-        timestamps.append(now)
         return await call_next(request)
 
 
@@ -68,4 +84,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("Cache-Control", "no-store")
+        return response
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/metrics":
+            return await call_next(request)
+        started = time.perf_counter()
+        response = await call_next(request)
+        route = request.scope.get("route")
+        route_name = re.sub(r"[^a-zA-Z0-9_]", "_", getattr(route, "path", "unmatched").strip("/")) or "root"
+        await asyncio.to_thread(observability.increment, f"http_requests_{response.status_code // 100}xx_total")
+        await asyncio.to_thread(
+            observability.observe_seconds,
+            f"http_{route_name}_duration_seconds",
+            time.perf_counter() - started,
+        )
         return response

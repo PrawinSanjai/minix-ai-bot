@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from database import db_session, get_db
+from database import get_db
 from config import Configuration
 from models import User
 from schemas import UserRegister, UserLogin
@@ -39,12 +39,6 @@ class Auth_Service():
 
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        print("PLAIN:", plain_password)
-        print("PLAIN TYPE:", type(plain_password))
-        print("PLAIN BYTES:", len(plain_password.encode("utf-8")))
-
-        print("HASH:", hashed_password)
-        print("HASH TYPE:", type(hashed_password))
         return pwd_context.verify(plain_password, hashed_password)
 
 
@@ -101,7 +95,8 @@ class Auth_Service():
 
 
     def change_password(
-        self, current_password: str, new_password: str, confirm_password: str, user: User
+        self, current_password: str, new_password: str, confirm_password: str,
+        user: User, db: Session,
     ) -> dict:
         if new_password != confirm_password:
             raise HTTPException(status_code=400, detail="New password and confirmation do not match")
@@ -113,10 +108,8 @@ class Auth_Service():
             raise HTTPException(status_code=400, detail="New password must be different from current password")
 
         new_hash = self.hash_password(new_password)
-        with db_session() as db:
-            current_user = db.query(User).filter(User.email == user.email).first()
-            current_user.hashed_password = new_hash
-            db.commit()
+        user.hashed_password = new_hash
+        db.commit()
 
         return {"message": "Password changed successfully"}
     

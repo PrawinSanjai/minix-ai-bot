@@ -10,7 +10,7 @@ const TONES = [
 ]
 
 export default function Settings() {
-  const { state, dispatch, handleUpdateProfile, handleUpdateTone, handleLogout, handleClearHistory } = useApp()
+  const { state, dispatch, handleUpdateProfile, handleUpdateTone, handleChangePassword, handleLogout, handleClearHistory } = useApp()
   const [name, setName] = useState(state.user.name)
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -27,9 +27,21 @@ export default function Settings() {
       if (selectedTone && selectedTone !== state.tone) {
         await handleUpdateTone(selectedTone)
       }
+      const passwordFields = [currentPw, newPw, confirmPw]
+      if (passwordFields.some(Boolean)) {
+        if (passwordFields.some(value => !value)) throw new Error('Fill in all password fields to change your password.')
+        await handleChangePassword({
+          current_password: currentPw,
+          new_password: newPw,
+          confirm_password: confirmPw,
+        })
+        setCurrentPw('')
+        setNewPw('')
+        setConfirmPw('')
+      }
       alert('Settings saved!')
     } catch (err) {
-      alert('Error saving settings: ' + err.message)
+      alert(err.message || 'Could not save settings.')
     } finally {
       setSaving(false)
     }
@@ -37,7 +49,9 @@ export default function Settings() {
 
   function handleClear() {
     if (state.chatHistory.length === 0) return
-    handleClearHistory()
+    if (window.confirm('Clear all conversations? This cannot be undone.')) {
+      handleClearHistory().catch(err => alert(err.message || 'Could not clear chat history.'))
+    }
   }
 
   function handleLogoutClick() {

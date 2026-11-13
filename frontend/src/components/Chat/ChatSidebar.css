@@ -168,6 +168,25 @@
   flex-shrink: 0;
 }
 
+.history-delete {
+  display: none;
+  padding: 5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.history-item:hover .history-delete,
+.history-delete:focus-visible {
+  display: inline-flex;
+}
+
+.history-delete:hover {
+  color: var(--danger);
+}
+
 .sidebar-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--glass-border);
@@ -215,5 +234,9 @@
 
   .close-sidebar {
     display: flex !important;
+  }
+
+  .history-delete {
+    display: inline-flex;
   }
 }

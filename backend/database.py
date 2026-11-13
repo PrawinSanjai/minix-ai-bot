@@ -18,7 +18,14 @@ NAMING_CONVENTION = {
 }
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
 Base = declarative_base(metadata=metadata)
-engine = create_engine(url=config.DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=0)
+engine = create_engine(
+    url=config.DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=config.DB_POOL_SIZE,
+    max_overflow=config.DB_MAX_OVERFLOW,
+    pool_timeout=config.DB_POOL_TIMEOUT_SECONDS,
+    pool_recycle=1800,
+)
 db_session = sessionmaker(autocommit=False, expire_on_commit=False, autoflush=True, bind=engine)
 
 # @contextmanager
@@ -26,13 +33,12 @@ def get_db():
     """
     Create database session for database operations.
     """
+    db = db_session()
     try:
-        db = db_session()
         yield db
         db.commit()
-    except Exception as e:
-        print(f"Exception occured while connectinng with DB {str(e)}")
+    except Exception:
         db.rollback()
-        raise e
+        raise
     finally:
         db.close()

@@ -1,10 +1,16 @@
 import logging
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from config import Configuration
 from middleware.security import (
+    MetricsMiddleware,
     RateLimitMiddleware,
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -14,9 +20,70 @@ from database import engine, Base
 from apis.auth import router as auth_router
 from apis.user import router as user_router
 from apis.chat import router as chat_router
+from services.cache import close_cache, initialize_cache
+from services.jobs import create_queue_client, outbox_publisher_loop
+from services.observability import close_metrics, initialize_metrics, render_prometheus
 
-api = FastAPI(title="minix-backend", docs_url="/docs")
 config = Configuration()
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.redis_limiter = None
+    app.state.redis_events = None
+    limiter = Redis.from_url(
+        config.REDIS_URL,
+        decode_responses=True,
+        max_connections=100,
+        socket_connect_timeout=1,
+        socket_timeout=1,
+        health_check_interval=30,
+    )
+    try:
+        await limiter.ping()
+        app.state.redis_limiter = limiter
+        initialize_cache(config.REDIS_URL)
+        app.state.redis_events = Redis.from_url(
+            config.REDIS_URL,
+            decode_responses=True,
+            max_connections=100,
+            socket_connect_timeout=1,
+            socket_timeout=None,
+            health_check_interval=30,
+        )
+    except RedisError:
+        logger.warning("Redis unavailable at startup; caching and shared rate limiting are disabled", exc_info=True)
+        await limiter.aclose()
+        app.state.redis_limiter = None
+
+    queue_client = create_queue_client()
+    publisher_task = None
+    initialize_metrics()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+        Base.metadata.create_all(bind=engine)
+        publisher_task = asyncio.create_task(outbox_publisher_loop(queue_client))
+        yield
+    finally:
+        if publisher_task is not None:
+            publisher_task.cancel()
+            try:
+                await publisher_task
+            except asyncio.CancelledError:
+                pass
+        queue_client.close()
+        close_cache()
+        close_metrics()
+        if app.state.redis_limiter is not None:
+            await app.state.redis_limiter.aclose()
+        if app.state.redis_events is not None:
+            await app.state.redis_events.aclose()
+
+
+api = FastAPI(title="minix-backend", docs_url="/docs", lifespan=lifespan)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +98,7 @@ api.add_middleware(
     allow_headers=["*"],
 )
 api.add_middleware(SecurityHeadersMiddleware)
+api.add_middleware(MetricsMiddleware)
 api.add_middleware(
     RequestSizeLimitMiddleware,
     max_body_bytes=config.MAX_REQUEST_BODY_BYTES,
@@ -40,14 +108,6 @@ api.add_middleware(
     max_requests=config.RATE_LIMIT_MAX_REQUESTS,
     window_seconds=config.RATE_LIMIT_WINDOW_SECONDS,
 )
-
-@api.on_event("startup")
-def on_startup():
-    with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        conn.commit()
-    Base.metadata.create_all(bind=engine)
-
 
 api.include_router(auth_router)
 api.include_router(user_router)
@@ -60,4 +120,13 @@ def home():
 
 @api.get("/health-check")
 def healthcheck():
-    return {"result": "success", "time": datetime.now()}
+    return {
+        "result": "success",
+        "time": datetime.now(),
+        "redis_available": api.state.redis_limiter is not None,
+    }
+
+
+@api.get("/metrics", include_in_schema=False, response_class=PlainTextResponse)
+def metrics():
+    return PlainTextResponse(render_prometheus(), media_type="text/plain; version=0.0.4; charset=utf-8")
