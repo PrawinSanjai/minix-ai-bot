@@ -74,7 +74,6 @@ class ChatJob(Base):
     status = Column(String(16), nullable=False, default="queued", index=True)
     attempts = Column(Integer, nullable=False, default=0)
     emotion = Column(String(20), nullable=True)
-    enqueued_at = Column(DateTime(timezone=True), nullable=True)
     error = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -83,24 +82,3 @@ class ChatJob(Base):
     conversation = relationship("Conversation")
     user_message = relationship("Message", foreign_keys=[user_message_id])
     assistant_message = relationship("Message", foreign_keys=[assistant_message_id])
-
-
-class JobOutbox(Base):
-    __tablename__ = "job_outbox"
-
-    id = Column(Integer, primary_key=True)
-    job_id = Column(Integer, ForeignKey("chat_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
-    available_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
-    published_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
-class ConversationMemory(Base):
-    __tablename__ = "conversation_memories"
-    __table_args__ = (UniqueConstraint("conversation_id", name="uq_conversation_memories_conversation_id"),)
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
-    summary = Column(Text, nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

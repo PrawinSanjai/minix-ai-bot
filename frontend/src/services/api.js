@@ -135,18 +135,6 @@ const api = {
 
   // ─── Chat ───
 
-  async sendMessage(message, conversationId, topic) {
-    const data = await request('/chat/message', {
-      method: 'POST',
-      body: JSON.stringify({ message, conversation_id: conversationId, topic }),
-    })
-    return {
-      reply: data.reply,
-      conversationId: data.conversation_id,
-      emotion: data.emotion,
-    }
-  },
-
   async enqueueMessage(message, conversationId, topic, idempotencyKey) {
     return request('/chat/message', {
       method: 'POST',

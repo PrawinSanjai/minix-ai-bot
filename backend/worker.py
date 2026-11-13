@@ -1,4 +1,4 @@
-"""Run a horizontally scalable Redis Streams chat worker process."""
+"""Run a worker that claims pending chat jobs from PostgreSQL."""
 
 import asyncio
 import logging

@@ -1,18 +1,15 @@
-from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException
-from jose import jwt
-from passlib.context import CryptContext
-from sqlalchemy.orm import Session
 import secrets
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security.api_key import APIKeyHeader
-from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from database import get_db
 from config import Configuration
+from database import get_db
 from models import User
 from schemas import UserRegister, UserLogin
 
@@ -33,7 +30,7 @@ API_KEY_NAME = "x-api-key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 
-class Auth_Service():
+class AuthService:
     def hash_password(self, password: str) -> str:
         return pwd_context.hash(password)
 

@@ -4,12 +4,12 @@ from sqlalchemy.orm import Session
 import schemas
 from models import User
 from database import get_db
-from services.auth import Auth_Service
-from services.user import User_Service
+from services.auth import AuthService
+from services.user import UserService
 
-user_service = User_Service()
+user_service = UserService()
 
-auth_service = Auth_Service()
+auth_service = AuthService()
 router = APIRouter(prefix="/users", tags=["users"])
 
 

@@ -1,5 +1,4 @@
 import logging
-import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI
@@ -21,7 +20,6 @@ from apis.auth import router as auth_router
 from apis.user import router as user_router
 from apis.chat import router as chat_router
 from services.cache import close_cache, initialize_cache
-from services.jobs import create_queue_client, outbox_publisher_loop
 from services.observability import close_metrics, initialize_metrics, render_prometheus
 
 config = Configuration()
@@ -57,24 +55,14 @@ async def lifespan(app: FastAPI):
         await limiter.aclose()
         app.state.redis_limiter = None
 
-    queue_client = create_queue_client()
-    publisher_task = None
     initialize_metrics()
     try:
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.commit()
         Base.metadata.create_all(bind=engine)
-        publisher_task = asyncio.create_task(outbox_publisher_loop(queue_client))
         yield
     finally:
-        if publisher_task is not None:
-            publisher_task.cancel()
-            try:
-                await publisher_task
-            except asyncio.CancelledError:
-                pass
-        queue_client.close()
         close_cache()
         close_metrics()
         if app.state.redis_limiter is not None:

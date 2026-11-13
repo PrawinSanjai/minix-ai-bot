@@ -1,6 +1,4 @@
 import logging
-import re
-import time
 import asyncio
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -9,15 +7,6 @@ from redis.exceptions import RedisError
 from services import observability
 
 logger = logging.getLogger(__name__)
-
-RATE_LIMIT_SCRIPT = """
-local count = redis.call('INCR', KEYS[1])
-if count == 1 then
-    redis.call('EXPIRE', KEYS[1], ARGV[1])
-end
-return {count, redis.call('TTL', KEYS[1])}
-"""
-
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, max_body_bytes: int):
@@ -60,9 +49,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_host = request.client.host if request.client else "unknown"
         key = f"minix:rate:{client_host}:{request.method}:{request.url.path}"
         try:
-            count, ttl = await redis_client.eval(RATE_LIMIT_SCRIPT, 1, key, self.window_seconds)
-            count = int(count)
-            ttl = int(ttl)
+            count = await redis_client.incr(key)
+            if count == 1:
+                await redis_client.expire(key, self.window_seconds)
+            ttl = await redis_client.ttl(key)
         except (RedisError, TypeError, ValueError):
             logger.debug("Redis rate limiter unavailable; allowing request", exc_info=True)
             return await call_next(request)
@@ -91,14 +81,6 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.url.path == "/metrics":
             return await call_next(request)
-        started = time.perf_counter()
         response = await call_next(request)
-        route = request.scope.get("route")
-        route_name = re.sub(r"[^a-zA-Z0-9_]", "_", getattr(route, "path", "unmatched").strip("/")) or "root"
-        await asyncio.to_thread(observability.increment, f"http_requests_{response.status_code // 100}xx_total")
-        await asyncio.to_thread(
-            observability.observe_seconds,
-            f"http_{route_name}_duration_seconds",
-            time.perf_counter() - started,
-        )
+        await asyncio.to_thread(observability.increment, f"http_responses_{response.status_code // 100}xx_total")
         return response

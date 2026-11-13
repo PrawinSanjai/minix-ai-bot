@@ -22,12 +22,12 @@ docker exec minix-db psql -U postgres -c "CREATE DATABASE minix_db;"
 
 The backend uses PostgreSQL with the pgvector extension. Keep the database container running while using Minix.
 
-Start Redis for shared recent-chat caching and rate limiting:
+Start Redis for recent-chat caching, rate limiting, and live reply updates:
 ```bash
 docker run -d --name minix-cache -p 127.0.0.1:6379:6379 -v minix-redis-data:/data redis:7-alpine redis-server --appendonly yes
 ```
 
-Redis also carries the worker queue and live reply events. The PostgreSQL outbox is the durable source of queued work; Redis Streams can be rebuilt from it if Redis loses entries.
+Chat jobs are stored directly in PostgreSQL. Redis is used for caching, rate limits, and reply updates.
 
 ### 2. Backend
 ```bash
@@ -45,12 +45,12 @@ Run the chat worker in a second terminal from `backend`:
 poetry run python worker.py
 ```
 
-The API accepts messages with an idempotency key, stores each message and job in PostgreSQL, and publishes jobs through an outbox to a Redis Stream. The worker pool generates replies and sends tokens over authenticated server-sent events. Failed work is retried with backoff and eventually recorded in a dead-letter stream. Run additional worker processes to increase throughput; `CHAT_WORKER_CONCURRENCY` sets the in-process limit per worker.
+The API saves each message and job to PostgreSQL. Workers claim pending jobs from the database, generate replies, and send tokens over authenticated server-sent events. Failed jobs are retried up to `CHAT_JOB_MAX_ATTEMPTS`. Run additional worker processes to increase throughput; `CHAT_WORKER_CONCURRENCY` controls the number of jobs each worker handles at once.
 
 Use Python 3.13 or newer. `GEMINI_API_KEY` is optional for startup, but chat replies require a working Gemini API key.
-Redis caches per-user conversation lists and details, coordinates per-conversation writes, shares rate limits, and transports jobs/events. API requests can still be queued while Redis is temporarily unavailable; workers require Redis to run. Database pool settings apply to each API and worker process, so keep PostgreSQL's connection limit above `(DB_POOL_SIZE + DB_MAX_OVERFLOW) × (API process count + worker process count)`, with room for administration and other services.
+Redis caches per-user conversation lists and details, coordinates per-conversation writes, shares rate limits, and transports live reply events. Workers require both PostgreSQL and Redis. Database pool settings apply to each API and worker process, so keep PostgreSQL's connection limit above `(DB_POOL_SIZE + DB_MAX_OVERFLOW) × (API process count + worker process count)`, with room for administration and other services.
 
-Operational settings, including retry count, worker concurrency, and summary cadence, are listed in `backend/.env.example`. `/health-check` reports Redis availability and `/metrics` exposes shared request and chat-job counters and latency histograms in Prometheus format.
+Operational settings, including retry count and worker concurrency, are listed in `backend/.env.example`. `/health-check` reports Redis availability and `/metrics` exposes basic request and chat-job metrics.
 
 ### 3. Frontend
 ```bash

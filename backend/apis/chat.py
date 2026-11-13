@@ -1,4 +1,3 @@
-import json
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -8,16 +7,21 @@ from redis.exceptions import RedisError
 
 from database import get_db
 from models import User
-from services.auth import Auth_Service
-from services.chat import Chat_Service
-from schemas import ChatRequest, ChatJobAccepted, ChatJobStatus, ConversationOut, ConversationDetail, ConversationCreate
-from config import Configuration
+from services.auth import AuthService
+from services.chat import ChatService
+from schemas import (
+    ChatJobAccepted,
+    ChatJobStatus,
+    ChatRequest,
+    ConversationCreate,
+    ConversationDetail,
+    ConversationOut,
+)
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-auth_service = Auth_Service()
-chat_service = Chat_Service()
-config = Configuration()
+auth_service = AuthService()
+chat_service = ChatService()
 logger = logging.getLogger(__name__)
 
 @router.post("/message", response_model=ChatJobAccepted, status_code=202)

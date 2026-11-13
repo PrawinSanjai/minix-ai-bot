@@ -94,12 +94,6 @@ class ChatRequest(BaseModel):
     topic: Optional[str] = None
 
 
-class ChatResponse(BaseModel):
-    reply: str
-    conversation_id: int
-    emotion: str
-
-
 class ChatJobAccepted(BaseModel):
     job_id: int
     conversation_id: int
