@@ -1,5 +1,7 @@
 import logging
 import asyncio
+from uuid import UUID, uuid4
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
@@ -7,6 +9,30 @@ from redis.exceptions import RedisError
 from services import observability
 
 logger = logging.getLogger(__name__)
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Give every request an ID that can be used to find its logs."""
+
+    async def dispatch(self, request: Request, call_next):
+        supplied_id = request.headers.get("X-Request-ID", "")
+        try:
+            UUID(supplied_id)
+            request_id = supplied_id
+        except ValueError:
+            request_id = str(uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        logger.info(
+            "request_id=%s method=%s path=%s status=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            response.status_code,
+        )
+        return response
+
 
 class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, max_body_bytes: int):
@@ -47,7 +73,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_host = request.client.host if request.client else "unknown"
-        key = f"minix:rate:{client_host}:{request.method}:{request.url.path}"
+        path = "/".join(
+            ":id" if part.isdigit() else part
+            for part in request.url.path.strip("/").split("/")
+        )
+        key = f"minix:rate:{client_host}:{request.method}:{path}"
         try:
             count = await redis_client.incr(key)
             if count == 1:

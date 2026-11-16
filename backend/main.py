@@ -4,6 +4,7 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -11,6 +12,7 @@ from config import Configuration
 from middleware.security import (
     MetricsMiddleware,
     RateLimitMiddleware,
+    RequestIdMiddleware,
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -78,14 +80,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
-api.add_middleware(
-    CORSMiddleware,
-    allow_origins=config.CORS_ALLOW_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-api.add_middleware(SecurityHeadersMiddleware)
 api.add_middleware(MetricsMiddleware)
 api.add_middleware(
     RequestSizeLimitMiddleware,
@@ -95,6 +89,19 @@ api.add_middleware(
     RateLimitMiddleware,
     max_requests=config.RATE_LIMIT_MAX_REQUESTS,
     window_seconds=config.RATE_LIMIT_WINDOW_SECONDS,
+)
+api.add_middleware(SecurityHeadersMiddleware)
+api.add_middleware(RequestIdMiddleware)
+api.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=config.ALLOWED_HOSTS,
+)
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.CORS_ALLOW_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 api.include_router(auth_router)

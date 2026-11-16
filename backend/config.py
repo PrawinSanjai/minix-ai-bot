@@ -1,10 +1,26 @@
 from services.utils import get_env
 
+
 class Configuration:
     SECRET_KEY = get_env("SECRET_KEY", default=None)
     DATABASE_URL = get_env("DATABASE_URL", default=None)
     MINIX_API_KEY = get_env("MINIX_API_KEY", default=None)
-    CORS_ALLOW_ORIGINS = get_env("CORS_ALLOW_ORIGINS", default=None)
+    CORS_ALLOW_ORIGINS = [
+        origin.strip()
+        for origin in get_env(
+            "CORS_ALLOW_ORIGINS",
+            default="http://localhost:5173,http://127.0.0.1:5173",
+        ).split(",")
+        if origin.strip()
+    ]
+    ALLOWED_HOSTS = [
+        host.strip()
+        for host in get_env(
+            "ALLOWED_HOSTS",
+            default="localhost,127.0.0.1,testserver",
+        ).split(",")
+        if host.strip()
+    ]
     RATE_LIMIT_WINDOW_SECONDS = int(get_env("RATE_LIMIT_WINDOW_SECONDS", default=60))
     RATE_LIMIT_MAX_REQUESTS = int(get_env("RATE_LIMIT_MAX_REQUESTS", default=120))
     MAX_REQUEST_BODY_BYTES = int(get_env("MAX_REQUEST_BODY_BYTES", default=25000))

@@ -37,7 +37,12 @@ poetry install --no-root
 cp .env.example .env
 # Generate a key with: python -c "import secrets; print(secrets.token_urlsafe(48))"
 # Put the generated value in SECRET_KEY in .env before starting the server.
-poetry run uvicorn main:api --reload --port 8000
+poetry run uvicorn main:api --reload --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*
+```
+
+Keep port `8000` reachable only from the gateway. Start the gateway in another terminal:
+```bash
+docker compose -f gateway/docker-compose.yml up -d
 ```
 
 Run the chat worker in a second terminal from `backend`:
@@ -60,6 +65,19 @@ npm run dev
 ```
 
 Open `http://localhost:5173`, create an account, and start talking.
+
+## API protection
+
+Minix uses Nginx as an API Gateway on port `8080`. It forwards requests to FastAPI on port `8000`. FastAPI also keeps its own protections enabled:
+
+- **Routing:** Nginx is the public entry point and forwards `/auth`, `/users`, and `/chat` requests to FastAPI.
+- **Rate and size limits:** Nginx limits requests by client IP and caps request bodies. FastAPI adds a shared Redis rate limit and its own body-size check.
+- **CORS and host validation:** FastAPI accepts only configured browser origins and hostnames. Set `CORS_ALLOW_ORIGINS` and `ALLOWED_HOSTS` for your deployment.
+- **Request IDs and headers:** Nginx creates a request ID; FastAPI returns it in `X-Request-ID` and includes it in app logs. FastAPI also adds security headers.
+- **Streaming:** Nginx disables response buffering so chat tokens can stream to the browser.
+- **Metrics:** `/metrics` exposes basic request and chat-job counters.
+
+The included Nginx config targets a backend running on the Docker host for local development. In production, point its upstream at the private backend service and do not expose port `8000` publicly.
 
 ## Running Without Gemini
 
